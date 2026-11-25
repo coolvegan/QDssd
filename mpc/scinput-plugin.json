@@ -1,0 +1,16 @@
+{
+  "name": "QDSSD SC Input",
+  "manufacturer": "r3d0xStyle",
+  "version": "1.1.2",
+  "format": "vst2",
+  "kind": "effect",
+  "uid": "qdsi",
+  "numInputs": 2,
+  "numOutputs": 2,
+  "category": "Effect",
+  "file32": "VST/qdssd-sc-input-arm32.so",
+  "file64": "VST/qdssd-sc-input-arm64.so",
+  "description": "Vocal key sender for QDSSD: analyses chroma, note probabilities and a 128-band spectrum and publishes them on a shared-memory bus. Audio passes through unchanged.",
+  "author": "r3d0xStyle",
+  "license": "GPL-3.0-or-later"
+}

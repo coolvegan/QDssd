@@ -1,0 +1,139 @@
+# ==============================================================================
+# DSP SPECIFICATION: DYNAMIC SPECTRAL RESONANCE SUPPRESSOR (SOOTHE-STYLE)
+# TARGET: Real-time C++ (ARMv7/ARM64 VST2, zero heap allocation in audio thread)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. CONSTANTS & PRE-ALLOCATED STATE (Initialize in prepare / resume())
+# ------------------------------------------------------------------------------
+CONST FFT_SIZE: int = 2048               # Power of 2 (1024 for low latency, 2048 for high res)
+CONST HOP_SIZE: int = FFT_SIZE // 4      # 75% overlap (4x COLA compliance)
+CONST NUM_BINS: int = (FFT_SIZE // 2) + 1
+CONST EPSILON: float = 1e-12
+
+# Precomputed symmetric sqrt-Hann window for analysis AND synthesis:
+# window[n] = sqrt(0.5 * (1.0 - cos(2.0 * PI * n / FFT_SIZE)))
+# Overlap-Add gain normalization factor for 4x overlap sqrt-Hann = 1.0 / 1.5
+CONST OLA_NORM: float = 1.0 / 1.5
+
+STATE PER CHANNEL (Left / Right):
+    input_ring_buffer: float[FFT_SIZE]   # Circular buffer for incoming time-domain samples
+    output_ring_buffer: float[FFT_SIZE]  # Circular accumulator for Overlap-Add
+    hop_counter: int = 0
+    write_pos: int = 0
+    read_pos: int = 0
+
+    fft_time_buf: float[FFT_SIZE]
+    fft_freq_buf: complex[NUM_BINS]
+    mag_spectrum: float[NUM_BINS]
+    log_mag_db: float[NUM_BINS]
+    smooth_env_db: float[NUM_BINS]
+    target_gain_lin: float[NUM_BINS]
+    smoothed_gain_lin: float[NUM_BINS] = {1.0 ... 1.0}
+
+# Precomputed frequency weighting curves (recalculated only when parameters change):
+    tilt_weight: float[NUM_BINS]         # Spectral focus curve (e.g., boost 2kHz-8kHz sensitivity)
+    erb_bandwidth_bins: int[NUM_BINS]    # Local neighborhood radius per bin (ERB / log-spaced)
+
+# ------------------------------------------------------------------------------
+# 2. TIME-DOMAIN AUDIO CALLBACK (processReplacing - Real-Time Safe)
+# ------------------------------------------------------------------------------
+FUNCTION process_channel(in_samples: float[], out_samples: float[], num_samples: int):
+    FOR i FROM 0 TO num_samples - 1:
+        # 1. Push incoming sample into circular input buffer
+        input_ring_buffer[write_pos] = in_samples[i]
+
+        # 2. Pop processed sample from circular output buffer and clear slot
+        out_samples[i] = output_ring_buffer[read_pos]
+        output_ring_buffer[read_pos] = 0.0
+
+        # 3. Advance circular pointers
+        write_pos = (write_pos + 1) % FFT_SIZE
+        read_pos  = (read_pos + 1) % FFT_SIZE
+        hop_counter += 1
+
+        # 4. Trigger Spectral Frame Processing every HOP_SIZE samples
+        IF hop_counter >= HOP_SIZE:
+            hop_counter = 0
+            process_spectral_frame()
+
+# ------------------------------------------------------------------------------
+# 3. FREQUENCY-DOMAIN SPECTRAL FRAME PIPELINE
+# ------------------------------------------------------------------------------
+FUNCTION process_spectral_frame():
+    # --- STEP A: Windowing & Forward Real-FFT ---
+    FOR n FROM 0 TO FFT_SIZE - 1:
+        idx = (write_pos + n) % FFT_SIZE
+        fft_time_buf[n] = input_ring_buffer[idx] * window[n]
+
+    fft_freq_buf = forward_rfft(fft_time_buf)  # Use pffft or KissFFT (ARM NEON)
+
+    # --- STEP B: Magnitude Conversion to dB ---
+    FOR k FROM 0 TO NUM_BINS - 1:
+        mag = hypot(fft_freq_buf[k].real, fft_freq_buf[k].imag)
+        mag_spectrum[k] = mag
+        log_mag_db[k] = 20.0 * log10(mag + EPSILON)
+
+    # --- STEP C: Psychoacoustic Local Spectral Envelope (Baseline Estimation) ---
+    # Estimates the broad tonal contour to isolate narrow resonant peaks.
+    # Radius scales inversely with parameter `sharpness` (narrow radius = surgical notches).
+    FOR k FROM 0 TO NUM_BINS - 1:
+        radius = max(2, int(erb_bandwidth_bins[k] * (1.5 - sharpness)))
+        k_start = max(0, k - radius)
+        k_end   = min(NUM_BINS - 1, k + radius)
+
+        # Compute local smoothed baseline (moving average or fast median approximation in dB)
+        sum_db = 0.0
+        count  = 0
+        FOR j FROM k_start TO k_end:
+            sum_db += log_mag_db[j]
+            count  += 1
+        smooth_env_db[k] = sum_db / float(count)
+
+    # --- STEP D: Resonance Excess Detection & Gain Computation ---
+    # Parameters:
+    #   depth_db: max attenuation (0.0 dB to 24.0 dB)
+    #   selectivity: threshold offset in dB (higher = only extreme peaks suppressed)
+    #   ratio: slope of compression above threshold (e.g., 2.0 to 10.0)
+    FOR k FROM 0 TO NUM_BINS - 1:
+        excess_db = (log_mag_db[k] - smooth_env_db[k]) * tilt_weight[k]
+        over_threshold_db = excess_db - selectivity
+
+        IF over_threshold_db > 0.0:
+            attenuation_db = min(depth_db, over_threshold_db * (1.0 - 1.0 / ratio))
+        ELSE:
+            attenuation_db = 0.0
+
+        target_gain_lin[k] = pow(10.0, -attenuation_db / 20.0)
+
+    # --- STEP E: Temporal Ballistics (Per-Bin 1-Pole IIR Envelope Follower) ---
+    # Prevents "musical noise" / watery artifacts across consecutive frames.
+    # alpha_attack  = exp(-HOP_SIZE / (attack_sec  * sample_rate))
+    # alpha_release = exp(-HOP_SIZE / (release_sec * sample_rate))
+    FOR k FROM 0 TO NUM_BINS - 1:
+        IF target_gain_lin[k] < smoothed_gain_lin[k]:
+            alpha = alpha_attack   # Gain decreasing (suppressing resonance)
+        ELSE:
+            alpha = alpha_release  # Gain recovering
+
+        smoothed_gain_lin[k] = alpha * smoothed_gain_lin[k] + (1.0 - alpha) * target_gain_lin[k]
+
+    # --- STEP F: Spectral Gain Application (Zero-Phase / Preserve Original Phase) ---
+    FOR k FROM 0 TO NUM_BINS - 1:
+        fft_freq_buf[k].real *= smoothed_gain_lin[k]
+        fft_freq_buf[k].imag *= smoothed_gain_lin[k]
+
+    # --- STEP G: Inverse Real-FFT & Overlap-Add (OLA) Synthesis ---
+    fft_time_buf = inverse_rfft(fft_freq_buf)
+
+    FOR n FROM 0 TO FFT_SIZE - 1:
+        out_idx = (read_pos + n) % FFT_SIZE
+        output_ring_buffer[out_idx] += fft_time_buf[n] * window[n] * OLA_NORM
+
+# ==============================================================================
+# IMPLEMENTATION CONSTRAINTS FOR AGENT:
+# 1. Report latency to VST2 host: setInitialDelay(FFT_SIZE).
+# 2. Zero dynamic memory allocation inside process_channel / process_spectral_frame.
+# 3. Use pffft or KissFFT compiled with -mfpu=neon (ARMv7) or default NEON (ARM64).
+# 4. Smooth parameter changes (depth, sharpness, selectivity) to avoid zipper noise.
+# ==============================================================================

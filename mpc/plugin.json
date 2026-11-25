@@ -1,0 +1,16 @@
+{
+  "name": "QDSSD",
+  "manufacturer": "r3d0xStyle",
+  "version": "1.1.2",
+  "format": "vst2",
+  "kind": "effect",
+  "uid": "qdsd",
+  "numInputs": 2,
+  "numOutputs": 2,
+  "category": "Effect",
+  "file32": "VST/qdssd-arm32.so",
+  "file64": "VST/qdssd-arm64.so",
+  "description": "Dynamic spectral processor: resonance suppression plus vocal-keyed spectral ducking fed by QDSSD SC Input over a shared-memory bus. Three FFT quality stages, focus tilt, stereo link, delta listen.",
+  "author": "r3d0xStyle",
+  "license": "GPL-3.0-or-later"
+}

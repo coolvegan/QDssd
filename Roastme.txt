@@ -1,0 +1,180 @@
+QDSSD — Dynamic Spectral Sidechain Ducking
+Design review request ("roast me")
+
+Vendor: r3d0xStyle
+Target: Akai MPC OS 3.10.1+ (VST2, ARM32 + ARM64) and desktop (VST2/VST3)
+Language: C++17, no heap allocation in the audio callback
+Status: concept, nothing implemented yet
+Concept basis: concept0/1/2 in this folder (Gemini drafts), revised
+Date: 2026-11-25
+
+====================================================================
+1. GOAL
+====================================================================
+Build a spectral processor with two jobs that share one engine:
+
+  A) Resonance suppression (Soothe-like): find narrow peaks relative to a
+     local spectral baseline and attenuate only those.
+  B) Vocal-keyed spectral ducking: a companion input plugin analyses the
+     vocal and sends a mask over shared memory; the main plugin ducks the
+     beat only where the vocal actually has energy — ideally only on the
+     notes the vocal sings.
+
+Non-goals: no machine learning, no cloud, no resynthesis, no pitch
+correction. The output must stay sample-aligned enough to use as an insert.
+
+====================================================================
+2. SIGNAL CHAIN
+====================================================================
+Vocal track:
+  [QDSSD SC Input]
+    STFT -> magnitude -> chroma(12) + HPS fundamental + harmonic weights
+         -> optional smoothed spectrum
+         -> shared-memory bus N (8 buses available)
+
+Beat / bus:
+  [QDSSD]
+    STFT -> mask from bus N (notes / spectrum / hybrid)
+         -> optional own resonance mask
+         -> per-bin gain -> ISTFT -> overlap-add
+         -> mix / delta / output
+
+====================================================================
+3. STRATEGY LAYERS
+====================================================================
+Three independent strategy axes, each selectable per instance.
+
+3.1 Function
+  Resonance  : own analysis only
+  Vocal      : bus mask only
+  Both       : resonance gain * vocal gain, depth-limited
+
+3.2 Key analysis (in SC Input, sent over the bus)
+  Notes      : chroma + note probabilities + level
+  Spectrum   : smoothed log spectrum (128 bins)
+  Hybrid     : both; the main plugin decides
+
+3.3 Quality
+  Low        : FFT 512,  hop 128, latency 11.6 ms @44.1k
+  Medium     : FFT 1024, hop 256, latency 23.2 ms
+  High       : FFT 2048, hop 512, latency 46.4 ms
+  Switching only while transport is stopped; latency is re-reported.
+
+====================================================================
+4. DSP DETAILS
+====================================================================
+4.1 STFT
+  Window: w[n] = sqrt(0.5 * (1 - cos(2*pi*n/N)))  (sqrt-Hann, periodic)
+  Analysis and synthesis both use w. The effective window is therefore
+  Hann, whose COLA sum at hop N/4 is 2.0, so OLA_NORM must be 0.5.
+  (The source sketches used 1/1.5, which is only correct for Hann*Hann,
+  i.e. when analysis and synthesis use full Hann. That is a 2.5 dB error.)
+
+  Latency: N samples with this ring-buffer scheme (oldest sample of the
+  frame is emitted first after the frame). Reported via setInitialDelay.
+
+4.2 Resonance path
+  baseline[k] = median(logMagDb[k-r .. k+r])
+  r(k) = clamp(ERB_bins(k) * (1.5 - sharpness), 2, 32)
+  excess[k] = (logMagDb[k] - baseline[k]) * focus[k]
+  over[k]   = excess[k] - selectivityDb
+  attDb[k]  = over > 0 ? min(depthDb, over * (1 - 1/ratio)) : 0
+
+  Median instead of mean: a moving average is pulled up by the very peaks
+  we want to find.
+
+4.3 Vocal path (notes)
+  For each active note n with f0 and confidence c:
+    mask[k] = max over n of  c * max over h of  w(h) * G(f[k] - h*f0, bw)
+    w(h) = 1 / h^0.8,  bw ~ 1/4 tone
+  A note below the confidence gate contributes nothing.
+
+  Spectrum mode: mask from the smoothed vocal spectrum above a threshold.
+  Hybrid: max(note_mask, spectrum_mask).
+
+4.4 Gain, smoothing, ballistics
+  target[k] = 10^(-attDb[k]/20)
+  frequency smoothing: 3-5 bin triangular kernel on target
+  time smoothing: one-pole per bin, attack/release in ms
+  final gain applied to both real and imaginary parts (zero phase)
+
+4.5 Transient protection
+  Short-term flux detector; when a transient is present, release is
+  shortened and attack is limited, so kicks are not softened.
+
+====================================================================
+5. BUS PROTOCOL
+====================================================================
+8 stereo buses, lock-free ring in /dev/shm, one slot per analysis frame.
+
+  struct Frame {
+    uint32_t seq;          // seqlock
+    uint64_t sampleTime;   // host sample counter at frame start
+    float    level;        // key RMS for gate display
+    uint8_t  chroma[12];
+    uint8_t  notes[128];   // probabilities, 0..255
+    int8_t   spectrum[128];// dB, -120..0
+    uint16_t flags;        // silent / clipped / analysis-valid
+  };
+
+  ~300 bytes/frame, ~86 frames/s at 44.1k -> ~26 KB/s per bus.
+
+  Reader: pick the newest frame whose sampleTime <= now - mainLatency,
+  never a partially written one (seqlock retry). Stale writer -> silence
+  after ~120 frames.
+
+====================================================================
+6. PARAMETERS
+====================================================================
+Main:
+  Mode        Resonance | Vocal | Both
+  Key         Notes | Spectrum | Hybrid
+  From Bus    Internal | 1..8
+  Quality     Low | Medium | High   (stop only)
+  Depth       0..24 dB
+  Selectivity 0..12 dB
+  Sharpness   0..1
+  Ratio       1..10
+  Attack      1..200 ms
+  Release     20..2000 ms
+  Focus       tilt curve
+  Stereo Link 0..100 %
+  M/S mode + balance
+  Delta listen, Mix, Output
+
+SC Input:
+  To Bus 1..8
+  Analysis    Notes | Spectrum | Hybrid
+  Gate        -60..0 dB
+  Focus
+
+====================================================================
+7. PLATFORM NOTES
+====================================================================
+- MPC effects receive only two track inputs. A VST2 "inputs 2/3" sidechain
+  is not available there; hence the companion plugin + shared memory.
+- Desktop: real 4-input VST2/VST3 (main L/R + sidechain L/R). Hosts differ
+  in how they route inputs 3/4; the bus stays as a fallback.
+- MPC does not necessarily compensate plugin latency across tracks. A
+  46 ms insert would shift the beat. This is the biggest open risk.
+- FFT: pffft (BSD) or KissFFT (BSD), NEON on ARM.
+
+====================================================================
+8. WHAT I WANT YOU TO ROAST
+====================================================================
+1. Is the note-based mask actually better than a smoothed spectral mask,
+   or is it over-engineering that will smear on breathy/polyphonic vocals?
+2. Is 1/4-tone bandwidth with 1/h^0.8 weights musically right? What would
+   you use instead?
+3. The latency: 23 ms default on a drum insert. Is that acceptable on a
+   groove box, or does the whole approach need a time-domain alternative?
+4. Does the median baseline + soft knee + frequency smoothing really avoid
+   musical noise, or is that wishful thinking?
+5. The bus protocol: seqlock + timestamps. What breaks first under load?
+6. Is "Both" (resonance * vocal) useful, or does it just double the
+   artifacts?
+7. Anything in the parameter set that is redundant, missing, or will be
+   impossible to automate from an MPC skin?
+8. Where will this be too slow on ARMv7 at 44.1 kHz with 1024/256?
+
+Be blunt. Prefer concrete failure modes over style opinions.

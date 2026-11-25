@@ -1,0 +1,29 @@
+{
+  "kit": {
+    "theme": "cyan",
+    "accent": "ff22e6ff"
+  },
+  "qlinkGroups": "rows",
+  "style": {
+    "background": "ff0d1216",
+    "accent": "ff22e6ff",
+    "text": "ffffffff",
+    "muted": "ff7d8a90"
+  },
+  "pages": [
+    {
+      "name": "BUS",
+      "background": "qdssd-bg.png",
+      "controls": [
+        {
+          "param": "To Bus",
+          "widget": "knob"
+        },
+        {
+          "widget": "text",
+          "text": "Vocal track - audio passes through"
+        }
+      ]
+    }
+  ]
+}

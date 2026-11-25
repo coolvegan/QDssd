@@ -1,0 +1,183 @@
+# ==============================================================================
+# DSP SPECIFICATION: SOOTHE-STYLE RESONANCE SUPPRESSOR (M/S, LINKING, FAST MEDIAN)
+# TARGET: Real-time C++ (ARMv7/ARM64 VST2, zero heap allocation in audio thread)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. CONSTANTS & PRE-ALLOCATED STATE (Initialize in prepare / resume())
+# ------------------------------------------------------------------------------
+CONST FFT_SIZE: int = 2048
+CONST HOP_SIZE: int = FFT_SIZE // 4
+CONST NUM_BINS: int = (FFT_SIZE // 2) + 1
+CONST EPSILON: float = 1e-12
+CONST OLA_NORM: float = 1.0 / 1.5
+CONST MAX_MEDIAN_RADIUS: int = 32        # Fixed stack scratchpad size for fast median
+CONST MAX_WINDOW_LEN: int = (2 * MAX_MEDIAN_RADIUS) + 1
+
+PARAMETERS:
+    depth_db: float                      # 0.0 to 24.0 dB
+    sharpness: float                     # 0.0 (broad) to 1.0 (surgical)
+    selectivity: float                   # 0.0 to 12.0 dB threshold offset
+    stereo_link: float                   # 0.0 (dual-mono / unlinked) to 1.0 (100% linked)
+    ms_mode: bool                        # false = L/R mode, true = Mid/Side mode
+    ms_balance: float                    # -1.0 (100% Mid only) via 0.0 (equal) to +1.0 (100% Side only)
+    delta_listen: bool                   # true = output removed resonances only (in - out)
+    mix: float                           # 0.0 (dry) to 1.0 (wet)
+
+STATE GLOBAL / STEREO:
+    hop_counter: int = 0
+    write_pos: int = 0
+    read_pos: int = 0
+    scratch_window: float[MAX_WINDOW_LEN] # Pre-allocated stack/member array for median sort
+
+    # Shared arrays for cross-channel Stereo Linking
+    raw_attenuation_db: float[2][NUM_BINS]
+    linked_attenuation_db: float[2][NUM_BINS]
+
+STATE PER CHANNEL ch IN {0, 1}:
+    input_ring_buffer: float[FFT_SIZE]
+    output_ring_buffer: float[FFT_SIZE]
+    dry_delay_buffer: float[FFT_SIZE]    # Delay-matched dry signal for Mix & Delta Listen
+
+    fft_time_buf: float[FFT_SIZE]
+    fft_freq_buf: complex[NUM_BINS]
+    log_mag_db: float[NUM_BINS]
+    smooth_env_db: float[NUM_BINS]
+    smoothed_gain_lin: float[NUM_BINS] = {1.0 ... 1.0}
+
+# ------------------------------------------------------------------------------
+# 2. TIME-DOMAIN AUDIO CALLBACK (Stereo Synchronized)
+# ------------------------------------------------------------------------------
+FUNCTION process_stereo_block(in_L: float[], in_R: float[], out_L: float[], out_R: float[], num_samples: int):
+    FOR i FROM 0 TO num_samples - 1:
+        # Step 1: Optional Mid/Side Encoding (0.70710678 = 1/sqrt(2) preserves energy)
+        IF ms_mode:
+            s0 = (in_L[i] + in_R[i]) * 0.70710678   # Mid
+            s1 = (in_L[i] - in_R[i]) * 0.70710678   # Side
+        ELSE:
+            s0 = in_L[i]
+            s1 = in_R[i]
+
+        # Step 2: Push into circular input buffers & read OLA outputs
+        input_ring_buffer[0][write_pos] = s0
+        input_ring_buffer[1][write_pos] = s1
+
+        wet0 = output_ring_buffer[0][read_pos]
+        wet1 = output_ring_buffer[1][read_pos]
+        output_ring_buffer[0][read_pos] = 0.0
+        output_ring_buffer[1][read_pos] = 0.0
+
+        # Step 3: Delay-matched dry signal (latency = FFT_SIZE)
+        dry0 = dry_delay_buffer[0][read_pos]
+        dry1 = dry_delay_buffer[1][read_pos]
+        dry_delay_buffer[0][write_pos] = s0
+        dry_delay_buffer[1][write_pos] = s1
+
+        # Step 4: Delta Listen or Dry/Wet Mix
+        IF delta_listen:
+            proc0 = dry0 - wet0
+            proc1 = dry1 - wet1
+        ELSE:
+            proc0 = dry0 + mix * (wet0 - dry0)
+            proc1 = dry1 + mix * (wet1 - dry1)
+
+        # Step 5: Optional Mid/Side Decoding back to L/R
+        IF ms_mode:
+            out_L[i] = (proc0 + proc1) * 0.70710678
+            out_R[i] = (proc0 - proc1) * 0.70710678
+        ELSE:
+            out_L[i] = proc0
+            out_R[i] = proc1
+
+        # Step 6: Advance circular pointers & trigger synchronized stereo frame
+        write_pos = (write_pos + 1) % FFT_SIZE
+        read_pos  = (read_pos + 1) % FFT_SIZE
+        hop_counter += 1
+
+        IF hop_counter >= HOP_SIZE:
+            hop_counter = 0
+            process_stereo_spectral_frame()
+
+# ------------------------------------------------------------------------------
+# 3. FAST MEDIAN HELPER (Zero-Allocation Quickselect / Insertion Sort for small N)
+# ------------------------------------------------------------------------------
+# Why Median instead of Mean:
+# Moving average gets pulled UP by narrow peaks, hiding adjacent resonances.
+# Median ignores narrow spikes and tracks the true harmonic/noise floor.
+FUNCTION fast_median_db(src_db: float[], k_start: int, k_end: int) -> float:
+    len = k_end - k_start + 1
+    FOR idx FROM 0 TO len - 1:
+        scratch_window[idx] = src_db[k_start + idx]
+
+    # For len <= 65 (MAX_WINDOW_LEN), std::nth_element or insertion sort on stack
+    # is cache-local and faster on ARM NEON than dynamic heap structures.
+    mid = len // 2
+    nth_element_in_place(scratch_window, 0, mid, len - 1)
+    RETURN scratch_window[mid]
+
+# ------------------------------------------------------------------------------
+# 4. SYNCHRONIZED STEREO FREQUENCY-DOMAIN PIPELINE
+# ------------------------------------------------------------------------------
+FUNCTION process_stereo_spectral_frame():
+    # --- PASS 1: Forward FFT & Resonance Excess Detection per Channel ---
+    FOR ch IN {0, 1}:
+        FOR n FROM 0 TO FFT_SIZE - 1:
+            idx = (write_pos + n) % FFT_SIZE
+            fft_time_buf[ch][n] = input_ring_buffer[ch][idx] * window[n]
+
+        fft_freq_buf[ch] = forward_rfft(fft_time_buf[ch])
+
+        FOR k FROM 0 TO NUM_BINS - 1:
+            mag = hypot(fft_freq_buf[ch][k].real, fft_freq_buf[ch][k].imag)
+            log_mag_db[ch][k] = 20.0 * log10(mag + EPSILON)
+
+        # Fast Median Spectral Baseline
+        FOR k FROM 0 TO NUM_BINS - 1:
+            radius = clamp(int(erb_bandwidth_bins[k] * (1.5 - sharpness)), 2, MAX_MEDIAN_RADIUS)
+            k_start = max(0, k - radius)
+            k_end   = min(NUM_BINS - 1, k + radius)
+            smooth_env_db[ch][k] = fast_median_db(log_mag_db[ch], k_start, k_end)
+
+        # Per-channel depth scaling (supports Mid/Side Balance weighting)
+        ch_depth = depth_db
+        IF ms_mode:
+            # ms_balance = -1.0 -> ch 0 (Mid) = 1.0x, ch 1 (Side) = 0.0x
+            # ms_balance = +1.0 -> ch 0 (Mid) = 0.0x, ch 1 (Side) = 1.0x
+            weight_0 = clamp(1.0 - max(0.0, ms_balance), 0.0, 1.0)
+            weight_1 = clamp(1.0 + min(0.0, ms_balance), 0.0, 1.0)
+            ch_depth *= (weight_0 IF ch == 0 ELSE weight_1)
+
+        FOR k FROM 0 TO NUM_BINS - 1:
+            excess_db = (log_mag_db[ch][k] - smooth_env_db[ch][k]) * tilt_weight[k]
+            over_thresh = excess_db - selectivity
+            IF over_thresh > 0.0:
+                raw_attenuation_db[ch][k] = min(ch_depth, over_thresh * 0.75)
+            ELSE:
+                raw_attenuation_db[ch][k] = 0.0
+
+    # --- PASS 2: Cross-Channel Stereo Linking ---
+    # Blends between independent per-channel attenuation and max(ch0, ch1)
+    # Prevents stereo image shifting when a resonance occurs on only one side.
+    FOR k FROM 0 TO NUM_BINS - 1:
+        max_atten = max(raw_attenuation_db[0][k], raw_attenuation_db[1][k])
+        linked_attenuation_db[0][k] = lerp(raw_attenuation_db[0][k], max_atten, stereo_link)
+        linked_attenuation_db[1][k] = lerp(raw_attenuation_db[1][k], max_atten, stereo_link)
+
+    # --- PASS 3: Temporal Ballistics & Inverse FFT Synthesis ---
+    FOR ch IN {0, 1}:
+        FOR k FROM 0 TO NUM_BINS - 1:
+            target_lin = pow(10.0, -linked_attenuation_db[ch][k] / 20.0)
+            alpha = alpha_attack IF (target_lin < smoothed_gain_lin[ch][k]) ELSE alpha_release
+            smoothed_gain_lin[ch][k] = alpha * smoothed_gain_lin[ch][k] + (1.0 - alpha) * target_lin
+
+            fft_freq_buf[ch][k].real *= smoothed_gain_lin[ch][k]
+            fft_freq_buf[ch][k].imag *= smoothed_gain_lin[ch][k]
+
+        fft_time_buf[ch] = inverse_rfft(fft_freq_buf[ch])
+
+        FOR n FROM 0 TO FFT_SIZE - 1:
+            out_idx = (read_pos + n) % FFT_SIZE
+            output_ring_buffer[ch][out_idx] += fft_time_buf[ch][n] * window[n] * OLA_NORM
+
+
+			

@@ -1,0 +1,49 @@
+{
+  "kit": {
+    "theme": "cyan",
+    "accent": "ff22e6ff"
+  },
+  "qlinkGroups": "rows",
+  "style": {
+    "background": "ff0d1216",
+    "accent": "ff22e6ff",
+    "text": "ffffffff",
+    "muted": "ff7d8a90"
+  },
+  "pages": [
+    {
+      "name": "QDSSD",
+      "background": "qdssd-bg.png",
+      "controls": [
+        {
+          "param": "Bus",
+          "widget": "knob"
+        },
+        {
+          "param": "Depth",
+          "widget": "knob"
+        },
+        {
+          "param": "Speed",
+          "widget": "knob"
+        },
+        {
+          "param": "Mix",
+          "widget": "knob"
+        },
+        {
+          "param": "Intensity",
+          "widget": "switch"
+        },
+        {
+          "param": "Delta",
+          "widget": "switch"
+        },
+        {
+          "widget": "text",
+          "text": "Delta = removed signal"
+        }
+      ]
+    }
+  ]
+}

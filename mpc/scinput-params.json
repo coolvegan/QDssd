@@ -1,0 +1,8 @@
+{
+  "name": "QDSSD SC Input", "vendor": "r3d0xStyle", "uid": "qdsi", "uidInt": 1902408553, "version": 1000,
+  "isInstrument": false, "numInputs": 2, "numOutputs": 2, "numPrograms": 1,
+  "programs": ["Default"],
+  "params": [
+    {"index": 0, "id": null, "name": "To Bus", "label": "", "display": "1", "default": 0.0, "automatable": true, "kind": "int", "choices": []}
+  ]
+}

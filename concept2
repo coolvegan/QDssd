@@ -1,0 +1,41 @@
+# ==============================================================================
+# ADDITION FOR VOCAL-THROUGH-BEAT CUTTING (SPECTRAL SIDECHAIN DUCKING)
+# ==============================================================================
+
+# 1. Additional Sidechain Inputs (VST2 Inputs 2 & 3 -> Vocal Track)
+STATE SIDECHAIN:
+    sc_input_ring_buffer: float[2][FFT_SIZE]
+    sc_fft_time_buf: float[2][FFT_SIZE]
+    sc_fft_freq_buf: complex[2][NUM_BINS]
+    sc_log_mag_db: float[2][NUM_BINS]
+
+# 2. In process_stereo_block(): Push Sidechain L/R (Inputs 2 & 3) into sc_input_ring_buffer
+#    (Convert Sidechain to Mono sum if Vocal is mono: sc_mono = 0.5 * (sc_L + sc_R))
+
+# 3. Modified Pass 1 in process_stereo_spectral_frame():
+FUNCTION compute_sidechain_ducking():
+    # Compute Forward FFT of the Vocal Sidechain signal
+    FOR n FROM 0 TO FFT_SIZE - 1:
+        idx = (write_pos + n) % FFT_SIZE
+        sc_fft_time_buf[n] = sc_mono_ring_buffer[idx] * window[n]
+
+    sc_fft_freq_buf = forward_rfft(sc_fft_time_buf)
+
+    FOR k FROM 0 TO NUM_BINS - 1:
+        sc_mag = hypot(sc_fft_freq_buf[k].real, sc_fft_freq_buf[k].imag)
+        sc_log_mag_db[k] = 20.0 * log10(sc_mag + EPSILON)
+
+    # Smooth Vocal Spectrum slightly across frequency (prevents comb-filtering)
+    # Using fast_median_db or narrow Gaussian blur across `k`
+    FOR k FROM 0 TO NUM_BINS - 1:
+        vocal_energy_db = sc_smooth_db[k] * tilt_weight[k]
+        over_thresh = vocal_energy_db - sidechain_threshold_db
+
+        IF over_thresh > 0.0:
+            # Attenuate the Beat ONLY where the Vocal exceeds the threshold
+            atten = min(depth_db, over_thresh * 0.75)
+            raw_attenuation_db[0][k] = atten
+            raw_attenuation_db[1][k] = atten
+        ELSE:
+            raw_attenuation_db[0][k] = 0.0
+            raw_attenuation_db[1][k] = 0.0
