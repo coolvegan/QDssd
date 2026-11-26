@@ -53,6 +53,11 @@ public:
         addParam (floatParam ("mix", "Mix", 0.0f, 100.0f, 100.0f, "%", 0));
         addParam (boolParam ("delta", "Delta", false));
         addParam (choiceParam ("intensity", "Intensity", { "Gentle", "Strong", "Extreme" }, 1));
+
+        addPrograms();
+        // Program 0 is the default a new instance gets, so it matches the
+        // documented working setup even before the host selects a program.
+        setProgram (0);
     }
 
     void prepare (double sampleRate, int maxBlockSize) override
@@ -114,6 +119,20 @@ public:
     }
 
 private:
+    // -----------------------------------------------------------------------
+    // Factory programs (plain values in parameter order)
+    // -----------------------------------------------------------------------
+    void addPrograms()
+    {
+        addProgram ("Vocal Clear",  { 1.0f, 24.0f, 50.0f, 100.0f, 0.0f, 2.0f });
+        addProgram ("Vocal Gentle", { 1.0f, 12.0f, 35.0f, 100.0f, 0.0f, 0.0f });
+        addProgram ("Vocal Deep",   { 1.0f, 24.0f, 70.0f, 100.0f, 0.0f, 2.0f });
+        addProgram ("Beat Duck",    { 1.0f, 18.0f, 45.0f, 100.0f, 0.0f, 1.0f });
+        addProgram ("808 Safe",     { 1.0f,  8.0f, 25.0f, 100.0f, 0.0f, 0.0f });
+        addProgram ("Vocal Subtle", { 1.0f, 10.0f, 50.0f,  60.0f, 0.0f, 1.0f });
+        addProgram ("Delta Check",  { 1.0f, 24.0f, 50.0f, 100.0f, 1.0f, 2.0f });
+    }
+
     qdssd::FilterDucker ducker;
     qdssd::BusMapping bus;
     qdssd::BusFrame keyFrame;

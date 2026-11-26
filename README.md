@@ -62,11 +62,11 @@ instances may read the same bus.
 
 ## Projects and the MPC screen
 
-Loading a project now updates the MPC screen right away. QDSSD has a single
-program, but a project load used to change the internal values while the knobs
-kept their old positions. The plugin now reports the changed parameters to the
-host and requests a redraw, so the screen follows the loaded state. This is the
-behaviour in the 2026-11 builds.
+Loading a project now updates the MPC screen right away. QDSSD's parameters are
+stored in the project, but a project load used to change the internal values
+while the knobs kept their old positions. The plugin now reports the changed
+parameters to the host and requests a redraw, so the screen follows the loaded
+state. This is the behaviour in the 2026-11 builds.
 
 ## Controls
 
@@ -86,6 +86,20 @@ behaviour in the 2026-11 builds.
 | Control | Range | What it does |
 |---|---|---|
 | **To Bus** | 1–8 | which bus to publish the key to |
+
+## Programs
+
+| Program | Bus | Depth | Speed | Mix | Intensity | Use case |
+|---|---|---|---|---|---|---|
+| **Vocal Clear** | 1 | 24 dB | 50 % | 100 % | Extreme | Default; the known-good vocal setup |
+| **Vocal Gentle** | 1 | 12 dB | 35 % | 100 % | Gentle | Light touch on a quiet or already-bright vocal |
+| **Vocal Deep** | 1 | 24 dB | 70 % | 100 % | Extreme | Slow, deep carve for dense beats |
+| **Beat Duck** | 1 | 18 dB | 45 % | 100 % | Strong | Duck the beat rather than a vocal |
+| **808 Safe** | 1 | 8 dB | 25 % | 100 % | Gentle | Leaves sub/kick energy intact |
+| **Vocal Subtle** | 1 | 10 dB | 50 % | 60 % | Strong | Parallel-style, half-wet ducking |
+| **Delta Check** | 1 | 24 dB | 50 % | 100 % | Extreme | Delta on; listen to what is removed |
+
+Bus 1 must match the SC Input's "To Bus"; all presets use Bus 1.
 
 ## How it works
 
@@ -233,13 +247,11 @@ file are. See [`ANALYSE.md`](ANALYSE.md) for the full report.
   product spectrum). Breath and polyphonic material smear; the mask is soft
   and Hybrid is the default.
 - **No desktop build yet.** In a DAW a real 4-input plugin would be possible.
-- **No presets yet.**
 - The MPC stores plugin state in its own opaque binary format, so parameters
   cannot be edited offline in a `.xpj`.
 
 Next steps: unnormalised exports for exact dB measurements, a better note
-tracker (YIN + hysteresis), a desktop build with a real spectrum analyser,
-and factory presets.
+tracker (YIN + hysteresis), and a desktop build with a real spectrum analyser.
 
 ## Repository layout
 

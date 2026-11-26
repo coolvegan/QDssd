@@ -1,13 +1,13 @@
 {
   "name": "QDSSD", "vendor": "r3d0xStyle", "uid": "qdsd", "uidInt": 1902408548, "version": 1100,
-  "isInstrument": false, "numInputs": 2, "numOutputs": 2, "numPrograms": 1,
-  "programs": ["Default"],
+  "isInstrument": false, "numInputs": 2, "numOutputs": 2, "numPrograms": 7,
+  "programs": ["Vocal Clear", "Vocal Gentle", "Vocal Deep", "Beat Duck", "808 Safe", "Vocal Subtle", "Delta Check"],
   "params": [
     {"index": 0, "id": null, "name": "Bus", "label": "", "display": "1", "default": 0.0, "automatable": true, "kind": "int", "choices": []},
     {"index": 1, "id": null, "name": "Depth", "label": "dB", "display": "24.0", "default": 1.0, "automatable": true, "kind": "float", "choices": []},
     {"index": 2, "id": null, "name": "Speed", "label": "%", "display": "50", "default": 0.5, "automatable": true, "kind": "int", "choices": []},
     {"index": 3, "id": null, "name": "Mix", "label": "%", "display": "100", "default": 1.0, "automatable": true, "kind": "int", "choices": []},
     {"index": 4, "id": null, "name": "Delta", "label": "", "display": "Off", "default": 0.0, "automatable": true, "kind": "bool", "choices": ["Off", "On"]},
-    {"index": 5, "id": null, "name": "Intensity", "label": "", "display": "Strong", "default": 0.5, "automatable": true, "kind": "choice", "choices": ["Gentle", "Strong", "Extreme"]}
+    {"index": 5, "id": null, "name": "Intensity", "label": "", "display": "Extreme", "default": 1.0, "automatable": true, "kind": "choice", "choices": ["Gentle", "Strong", "Extreme"]}
   ]
 }
