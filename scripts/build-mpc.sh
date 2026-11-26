@@ -12,7 +12,7 @@ PKG_SC="$ROOT/dist/mpc/r3d0xStyle - VST - QDSSD SC Input"
 IMAGE="qdssd-mpc-cross"
 CXX="${CXX:-g++}"
 PY="${PYTHON:-python3}"
-VERSION="1.1.2"
+VERSION="1.1.3"
 
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 command -v "$PY" >/dev/null || { echo "python3 is required" >&2; exit 1; }

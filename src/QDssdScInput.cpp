@@ -29,7 +29,7 @@ public:
         i.name = "QDSSD SC Input";
         i.vendor = "r3d0xStyle";
         i.uniqueId = MPC_FOURCC ('q', 'd', 's', 'i');
-        i.version = 1000;
+        i.version = 1103;
         i.isInstrument = false;
         i.numInputs = 2;
         i.numOutputs = 2;

@@ -36,7 +36,7 @@ public:
         i.name = "QDSSD";
         i.vendor = "r3d0xStyle";
         i.uniqueId = MPC_FOURCC ('q', 'd', 's', 'd');
-        i.version = 1100;
+        i.version = 1103;
         i.isInstrument = false;
         i.numInputs = 2;
         i.numOutputs = 2;

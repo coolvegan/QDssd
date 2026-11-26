@@ -1,5 +1,5 @@
 {
-  "name": "QDSSD SC Input", "vendor": "r3d0xStyle", "uid": "qdsi", "uidInt": 1902408553, "version": 1000,
+  "name": "QDSSD SC Input", "vendor": "r3d0xStyle", "uid": "qdsi", "uidInt": 1902408553, "version": 1103,
   "isInstrument": false, "numInputs": 2, "numOutputs": 2, "numPrograms": 1,
   "programs": ["Default"],
   "params": [

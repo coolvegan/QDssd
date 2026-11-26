@@ -1,5 +1,5 @@
 {
-  "name": "QDSSD", "vendor": "r3d0xStyle", "uid": "qdsd", "uidInt": 1902408548, "version": 1100,
+  "name": "QDSSD", "vendor": "r3d0xStyle", "uid": "qdsd", "uidInt": 1902408548, "version": 1103,
   "isInstrument": false, "numInputs": 2, "numOutputs": 2, "numPrograms": 7,
   "programs": ["Vocal Clear", "Vocal Gentle", "Vocal Deep", "Beat Duck", "808 Safe", "Vocal Subtle", "Delta Check"],
   "params": [
