@@ -202,7 +202,7 @@ Output:
 ```
 dist/mpc/r3d0xStyle - VST - QDSSD/
 dist/mpc/r3d0xStyle - VST - QDSSD SC Input/
-dist/r3d0xStyle - VST - QDSSD-1.1.2.zip
+dist/r3d0xStyle - VST - QDSSD-1.1.3.zip
 ```
 
 ## Tests
@@ -236,13 +236,14 @@ Exports of a real project (19.46 s, 44.1 kHz, 24 bit) show:
 - from **250 Hz upwards the removal is substantial** — the delta reaches the
   level of the mix, i.e. the wet content is almost fully removed there
 
-Caveat: the MPC export normalises every file to −0.09 dBFS, so absolute
-level comparisons between exports are not reliable. Band ratios inside one
-file are. See [`ANALYSE.md`](ANALYSE.md) for the full report.
+Caveat: the old test exports were peak-limited by the previous master chain
+at −0.09 dBFS; the MPC itself does not normalise. Absolute level comparisons
+between those files are not reliable. Band ratios inside one file are. See
+[`ANALYSE.md`](ANALYSE.md) for the full report.
 
 ## Limitations and status
 
-- **Prototype, version 1.1.2.** The DSP is tested; the product polish is not.
+- **Prototype, version 1.1.3.** The DSP is tested; the product polish is not.
 - **Note detection is deliberately simple** (chroma accumulation + harmonic
   product spectrum). Breath and polyphonic material smear; the mask is soft
   and Hybrid is the default.

@@ -50,10 +50,11 @@ trockene Beat sein müsste. Das ist ohne weitere Annahme unmöglich.
 
 ## 4. Warum die absoluten Pegel nicht vergleichbar sind
 
-**Alle Exporte peaken exakt bei −0,09 dBFS.** Ein Delta-Signal (das
-Entfernte) würde ohne Normalisierung deutlich leiser sein als der Mix. Der
-MPC-Export zieht also jede Datei einzeln auf Vollaussteuerung — oder der
-Master-Limiter greift bei jeder Datei anders.
+**Alle alten Exporte peaken exakt bei −0,09 dBFS.** Das war die Decke der
+damaligen Master-Kette (Maximizer), nicht der Export: Die MPC normalisiert
+nicht (vom Nutzer bestätigt). Ein Delta-Signal würde ohne diese Kette
+deutlich leiser sein als der Mix; die absoluten Pegel bleiben deshalb
+unbrauchbar.
 
 Konsequenz:
 
@@ -64,9 +65,9 @@ Konsequenz:
 ## 5. Was daraus folgt
 
 1. Der DSP arbeitet korrekt und selektiv: Sub frei, ab 250 Hz starke Absenkung.
-2. Die exakte dB-Zahl pro Band braucht **unnormalisierte Exporte**.
-3. Für die nächste Messung: im Export-Dialog die Normalisierung abschalten,
-   dann Beat-Solo mit und ohne QDSSD exportieren.
+2. Die exakte dB-Zahl pro Band braucht **Exporte ohne Master-Kette**.
+3. Für die nächste Messung: Maximizer und Master-Plugins umgehen, dann
+   Beat-Solo mit und ohne QDSSD exportieren.
 
 ## 6. Reproduzierbare Prüfungen im Repo
 

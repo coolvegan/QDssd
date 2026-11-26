@@ -87,18 +87,18 @@ Analysiert wurden Exporte des Projekts `90-Under-One-Sun`:
 - **Sub geschützt**: im Delta −15 dB relativ zum Mix bei 31 Hz
 - **ab 250 Hz**: Delta auf Mix-Niveau, also praktisch vollständig entfernt
 
-Wichtige Einschränkung: **Die MPC-Exporte werden normalisiert** (alle Dateien
-peaken bei −0,09 dBFS). Absolute Pegelvergleiche zwischen Exporten sind
-deshalb nicht belastbar. Die Bandverteilung innerhalb einer Datei ist es sehr
-wohl. Details in [`ANALYSE.md`](ANALYSE.md).
+Wichtige Einschränkung: **Die alten Exporte wurden von der damaligen
+Master-Kette bei −0,09 dBFS begrenzt**, nicht vom Export — die MPC normalisiert
+nicht. Absolute Pegelvergleiche zwischen diesen Dateien sind deshalb nicht
+belastbar. Die Bandverteilung innerhalb einer Datei ist es sehr wohl. Details in [`ANALYSE.md`](ANALYSE.md).
 
 ## 6. Bekannte Grenzen
 
 1. **Notenerkennung ist grob.** Chroma-Akkumulation plus Harmonik-Kamm, ohne
    polyphone Analyse. Bei hauchigen oder mehrstimmigen Vocals wird die Maske
    unscharf. Deshalb ist sie weich und der Hybrid-Modus Standard.
-2. **MPC-Export normalisiert.** Für exakte dB-Werte muss ohne Normalisierung
-   exportiert werden.
+2. **Alte Exporte master-limitiert.** Für exakte dB-Werte ohne Master-Kette
+   exportieren; die MPC selbst normalisiert nicht.
 3. **Kein Desktop-Build.** Im DAW wäre ein echtes 4-Eingangs-Plugin möglich;
    derzeit gibt es nur das MPC-Paar.
 4. **Plugin-State der MPC ist undurchsichtig.** Die `.xpj` speichert den
