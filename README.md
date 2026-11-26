@@ -243,6 +243,8 @@ between those files are not reliable. Band ratios inside one file are. See
 
 ## Limitations and status
 
+- **MPC Sample:** not mapped. QDSSD needs QDSSD SC Input and the shared-memory
+  bus; without a key it is a no-op. The two-plugin workflow is untested there.
 - **Prototype, version 1.1.3.** The DSP is tested; the product polish is not.
 - **Note detection is deliberately simple** (chroma accumulation + harmonic
   product spectrum). Breath and polyphonic material smear; the mask is soft
