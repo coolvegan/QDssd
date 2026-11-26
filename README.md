@@ -60,6 +60,14 @@ Uninstalling: remove the folders and restart.
 The sender track must not be muted. One sender per bus; several QDSSD
 instances may read the same bus.
 
+## Projects and the MPC screen
+
+Loading a project now updates the MPC screen right away. QDSSD has a single
+program, but a project load used to change the internal values while the knobs
+kept their old positions. The plugin now reports the changed parameters to the
+host and requests a redraw, so the screen follows the loaded state. This is the
+behaviour in the 2026-11 builds.
+
 ## Controls
 
 ### QDSSD
